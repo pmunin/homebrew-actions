@@ -3,9 +3,9 @@ description: Render a formula template and create or update it in a Homebrew tap
 
 inputs:
   formula-name:
-    description: 'Formula name (defaults to calling repo name). Updated file: Formula/<name>.rb'
+    description: 'Formula name (defaults to calling repo name, stripping "homebrew-" prefix if present). Updated file: Formula/<name>.rb'
     required: false
-    default: ${{ github.event.repository.name }}
+    default: ''
   formula-template-path:
     description: 'Path to .rb.envsubst template file in the calling repo workspace'
     required: true
@@ -17,6 +17,14 @@ inputs:
     description: 'Target Homebrew tap repository (e.g. "owner/homebrew-personal"). Defaults to the current repository.'
     required: false
     default: ${{ github.repository }}
+  formula-commit-message:
+    description: 'Custom commit message for the formula upsert. Defaults to "Upsert <formula-name> formula"'
+    required: false
+    default: ''
+  formula-commit-tag:
+    description: 'If set, upsert this tag to the formula commit in the target repo'
+    required: false
+    default: ''
   github-write-token:
     description: 'GitHub PAT with write access to the homebrew-repo (GITHUB_TOKEN cannot write cross-repo)'
     required: true
@@ -32,7 +40,15 @@ runs:
         FORMULA_TEMPLATE_PATH: ${{ inputs.formula-template-path }}
         HOMEBREW_REPO: ${{ inputs.homebrew-repo }}
         EXTRA_ENVS: ${{ inputs.extra-envs }}
+        FORMULA_COMMIT_MESSAGE: ${{ inputs.formula-commit-message }}
+        FORMULA_COMMIT_TAG: ${{ inputs.formula-commit-tag }}
       run: |
+        # Default formula name: repo name with "homebrew-" prefix stripped
+        if [ -z "$FORMULA_NAME" ]; then
+          FORMULA_NAME="${{ github.event.repository.name }}"
+          FORMULA_NAME="${FORMULA_NAME#homebrew-}"
+        fi
+
         # Export extra env vars and build substitution list for envsubst
         SUBST_VARS=""
         if [ -n "$EXTRA_ENVS" ]; then
@@ -62,7 +78,7 @@ runs:
 
         API_ARGS=(
           -X PUT
-          -f message="Bump $FORMULA_NAME to $TAG"
+          -f message="${FORMULA_COMMIT_MESSAGE:-Upsert $FORMULA_NAME formula}"
           -f content="$ENCODED"
           -f branch="main"
         )
@@ -70,4 +86,16 @@ runs:
           API_ARGS+=(-f sha="$SHA")
         fi
 
-        gh api "repos/$HOMEBREW_REPO/contents/$FORMULA_PATH" "${API_ARGS[@]}"
+        COMMIT_SHA=$(gh api "repos/$HOMEBREW_REPO/contents/$FORMULA_PATH" "${API_ARGS[@]}" --jq '.commit.sha')
+
+        # Optionally tag the formula commit
+        if [ -n "$FORMULA_COMMIT_TAG" ] && [ -n "$COMMIT_SHA" ]; then
+          REF="refs/tags/$FORMULA_COMMIT_TAG"
+          # Try to update existing tag, otherwise create it
+          if gh api "repos/$HOMEBREW_REPO/git/$REF" --silent 2>/dev/null; then
+            gh api -X PATCH "repos/$HOMEBREW_REPO/git/$REF" -f sha="$COMMIT_SHA" -F force=true
+          else
+            gh api -X POST "repos/$HOMEBREW_REPO/git/refs" -f ref="$REF" -f sha="$COMMIT_SHA"
+          fi
+          echo "Tagged $FORMULA_COMMIT_TAG -> $COMMIT_SHA in $HOMEBREW_REPO"
+        fi
