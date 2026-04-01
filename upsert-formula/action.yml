@@ -26,8 +26,9 @@ inputs:
     required: false
     default: ''
   github-write-token:
-    description: 'GitHub PAT with write access to the homebrew-repo (GITHUB_TOKEN cannot write cross-repo)'
-    required: true
+    description: 'GitHub token with write access to the homebrew-repo. Defaults to the workflow token (sufficient for same-repo, use a PAT for cross-repo).'
+    required: false
+    default: ${{ github.token }}
 
 runs:
   using: composite
