@@ -14,8 +14,9 @@ inputs:
     required: false
     default: ''
   homebrew-repo:
-    description: 'Target Homebrew tap repository (e.g. "owner/homebrew-personal")'
-    required: true
+    description: 'Target Homebrew tap repository (e.g. "owner/homebrew-personal"). Defaults to the current repository.'
+    required: false
+    default: ${{ github.repository }}
   github-write-token:
     description: 'GitHub PAT with write access to the homebrew-repo (GITHUB_TOKEN cannot write cross-repo)'
     required: true
