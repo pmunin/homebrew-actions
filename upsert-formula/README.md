@@ -1,6 +1,6 @@
 # Upsert Formula Action
 
-Reusable composite action that renders a `.rb.envsubst` formula template and creates or updates `Formula/<name>.rb` in a target Homebrew tap repository.
+Reusable composite action that renders a formula template and creates or updates `Formula/<name>.rb` in a target Homebrew tap repository.
 
 ## Usage
 
@@ -20,8 +20,34 @@ jobs:
 
       - uses: pmunin/homebrew-actions/upsert-formula@main
         with:
-          formula-template-path: .github/workflows/my-formula.rb.envsubst
+          formula-template-path: homebrew-formula.rb
+          extra-envs: |
+            TAG=${{ github.event.release.tag_name }}
+          github-write-token: ${{ secrets.HOMEBREW_PAT }}
+```
+
+### Updating a formula in another repo
+
+```yaml
+      - uses: pmunin/homebrew-actions/upsert-formula@main
+        with:
+          formula-template-path: homebrew-formula.rb
           homebrew-repo: <owner>/homebrew-<tap>
+          formula-commit-message: "Bump my-tool to ${{ github.event.release.tag_name }}"
+          extra-envs: |
+            TAG=${{ github.event.release.tag_name }}
+          github-write-token: ${{ secrets.HOMEBREW_PAT }}
+```
+
+### Tagging the formula commit
+
+Useful when the repo is itself a Homebrew tap and you want the release tag to point at the commit that includes the updated formula:
+
+```yaml
+      - uses: pmunin/homebrew-actions/upsert-formula@main
+        with:
+          formula-template-path: homebrew-formula.rb
+          formula-commit-tag: ${{ github.event.release.tag_name }}
           extra-envs: |
             TAG=${{ github.event.release.tag_name }}
           github-write-token: ${{ secrets.HOMEBREW_PAT }}
@@ -29,19 +55,21 @@ jobs:
 
 ## Inputs
 
-| Input                     | Required | Default           | Description                                                   |
-| ------------------------- | -------- | ----------------- | ------------------------------------------------------------- |
-| `formula-name`          | No       | Calling repo name | Name of the formula file (`Formula/<name>.rb`)              |
-| `formula-template-path` | Yes      |                   | Path to `.rb.envsubst` template in the calling repo         |
-| `extra-envs`            | No       |                   | Additional env vars for `envsubst`, multiline `KEY=VALUE` |
-| `homebrew-repo`         | Yes      |                   | Target Homebrew tap repository (e.g.`owner/homebrew-tap`)   |
-| `github-write-token`    | Yes      |                   | GitHub PAT with write access to the target `homebrew-repo`  |
+| Input | Required | Default | Description |
+| --- | --- | --- | --- |
+| `formula-name` | No | Repo name (strips `homebrew-` prefix) | Name of the formula file (`Formula/<name>.rb`) |
+| `formula-template-path` | Yes | | Path to formula template in the calling repo |
+| `extra-envs` | No | | Additional env vars for `envsubst`, multiline `KEY=VALUE` |
+| `homebrew-repo` | No | Current repository | Target Homebrew tap repository (e.g. `owner/homebrew-tap`) |
+| `formula-commit-message` | No | `Upsert <formula-name> formula` | Custom commit message for the formula upsert |
+| `formula-commit-tag` | No | | If set, upsert this tag to the formula commit in the target repo |
+| `github-write-token` | Yes | | GitHub PAT with write access to the target `homebrew-repo` |
 
 ## Template
 
-The template file uses `envsubst` syntax (`${VAR_NAME}`). Variables from `extra-envs` plus standard GitHub Actions env vars are available.
+The template file uses `envsubst` syntax (`${VAR_NAME}`). Only variables from `extra-envs` are substituted.
 
-Example template (`.github/workflows/my-tool.rb.envsubst`):
+Example template (`homebrew-formula.rb`):
 
 ```ruby
 class MyTool < Formula
@@ -63,9 +91,11 @@ The action needs a GitHub Personal Access Token with write access to the target 
    - **Repository access:** select your target homebrew tap repository
    - **Permissions:** Contents → Read and write
 2. Add the PAT as a secret in your repo:
+
    ```sh
    gh secret set HOMEBREW_PAT -R <owner>/<your-repo>
    ```
+
 3. Reference it in your workflow as `${{ secrets.HOMEBREW_PAT }}`.
 
 ## Access settings

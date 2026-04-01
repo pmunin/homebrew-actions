@@ -76,9 +76,11 @@ runs:
         # Try to get existing file SHA (will be empty for new formulas)
         SHA=$(gh api "repos/$HOMEBREW_REPO/contents/$FORMULA_PATH" --jq '.sha' 2>/dev/null || true)
 
+        COMMIT_MSG="${FORMULA_COMMIT_MESSAGE:-Upsert $FORMULA_NAME formula}"$'\n[skip ci]'
+
         API_ARGS=(
           -X PUT
-          -f message="${FORMULA_COMMIT_MESSAGE:-Upsert $FORMULA_NAME formula}"
+          -f message="$COMMIT_MSG"
           -f content="$ENCODED"
           -f branch="main"
         )
@@ -86,10 +88,26 @@ runs:
           API_ARGS+=(-f sha="$SHA")
         fi
 
-        COMMIT_SHA=$(gh api "repos/$HOMEBREW_REPO/contents/$FORMULA_PATH" "${API_ARGS[@]}" --jq '.commit.sha')
+        # Upsert may return 422 if content is identical (no changes) — treat as success
+        COMMIT_SHA=""
+        if RESPONSE=$(gh api "repos/$HOMEBREW_REPO/contents/$FORMULA_PATH" "${API_ARGS[@]}" 2>&1); then
+          COMMIT_SHA=$(echo "$RESPONSE" | jq -r '.commit.sha // empty')
+          echo "Formula upserted: $FORMULA_PATH"
+        else
+          if echo "$RESPONSE" | grep -qi "identical\|no change\|422"; then
+            echo "Formula unchanged, skipping commit"
+          else
+            echo "::error::Failed to upsert formula: $RESPONSE"
+            exit 1
+          fi
+        fi
 
-        # Optionally tag the formula commit
-        if [ -n "$FORMULA_COMMIT_TAG" ] && [ -n "$COMMIT_SHA" ]; then
+        # Optionally tag the formula commit (or HEAD of target branch if no new commit)
+        if [ -n "$FORMULA_COMMIT_TAG" ]; then
+          # If no new commit was made, resolve HEAD of the target branch
+          if [ -z "$COMMIT_SHA" ]; then
+            COMMIT_SHA=$(gh api "repos/$HOMEBREW_REPO/git/ref/heads/main" --jq '.object.sha')
+          fi
           REF="refs/tags/$FORMULA_COMMIT_TAG"
           # Try to update existing tag, otherwise create it
           if gh api "repos/$HOMEBREW_REPO/git/$REF" --silent 2>/dev/null; then
