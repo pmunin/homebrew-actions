@@ -17,6 +17,10 @@ inputs:
     description: 'Target Homebrew tap repository (e.g. "owner/homebrew-personal"). Defaults to the current repository.'
     required: false
     default: ${{ github.repository }}
+  branch:
+    description: 'Branch in the homebrew-repo to commit the formula to. Defaults to the default branch of that repository (e.g. main or master).'
+    required: false
+    default: ''
   formula-commit-message:
     description: 'Custom commit message for the formula upsert. Defaults to "Upsert <formula-name> formula"'
     required: false
@@ -40,6 +44,7 @@ runs:
         FORMULA_NAME: ${{ inputs.formula-name }}
         FORMULA_TEMPLATE_PATH: ${{ inputs.formula-template-path }}
         HOMEBREW_REPO: ${{ inputs.homebrew-repo }}
+        BRANCH: ${{ inputs.branch }}
         EXTRA_ENVS: ${{ inputs.extra-envs }}
         FORMULA_COMMIT_MESSAGE: ${{ inputs.formula-commit-message }}
         FORMULA_COMMIT_TAG: ${{ inputs.formula-commit-tag }}
@@ -49,6 +54,13 @@ runs:
           FORMULA_NAME="${{ github.event.repository.name }}"
           FORMULA_NAME="${FORMULA_NAME#homebrew-}"
         fi
+
+        # Resolve target branch: explicit input, else the homebrew-repo's default branch
+        if [ -z "$BRANCH" ]; then
+          BRANCH=$(gh api "repos/$HOMEBREW_REPO" --jq '.default_branch' 2>/dev/null || true)
+          BRANCH="${BRANCH:-main}"
+        fi
+        echo "Target branch: $BRANCH"
 
         # Export extra env vars and build substitution list for envsubst
         SUBST_VARS=""
@@ -83,7 +95,7 @@ runs:
           -X PUT
           -f message="$COMMIT_MSG"
           -f content="$ENCODED"
-          -f branch="main"
+          -f branch="$BRANCH"
         )
         if [ -n "$SHA" ]; then
           API_ARGS+=(-f sha="$SHA")
@@ -107,7 +119,7 @@ runs:
         if [ -n "$FORMULA_COMMIT_TAG" ]; then
           # If no new commit was made, resolve HEAD of the target branch
           if [ -z "$COMMIT_SHA" ]; then
-            COMMIT_SHA=$(gh api "repos/$HOMEBREW_REPO/git/ref/heads/main" --jq '.object.sha')
+            COMMIT_SHA=$(gh api "repos/$HOMEBREW_REPO/git/ref/heads/$BRANCH" --jq '.object.sha')
           fi
           REF="refs/tags/$FORMULA_COMMIT_TAG"
           # Try to update existing tag, otherwise create it
