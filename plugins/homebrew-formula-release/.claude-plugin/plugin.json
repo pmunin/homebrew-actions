@@ -1,0 +1,19 @@
+{
+  "name": "homebrew-formula-release",
+  "description": "Set up a GitHub Actions release workflow that automatically updates a Homebrew formula whenever a GitHub release is published, using the pmunin/homebrew-actions/upsert-formula GitHub Action.",
+  "version": "0.0.1",
+  "author": {
+    "name": "Philipp Munin"
+  },
+  "homepage": "https://github.com/pmunin/homebrew-actions/tree/main/plugins/homebrew-formula-release",
+  "license": "MIT",
+  "keywords": [
+    "homebrew",
+    "formula",
+    "tap",
+    "github-actions",
+    "release",
+    "ci-cd"
+  ],
+  "skills": ["./skills/homebrew-formula-release"]
+}
