@@ -41,6 +41,8 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-write-token }}
+        WORKFLOW_TOKEN: ${{ github.token }}
+        CALLER_REPO: ${{ github.repository }}
         FORMULA_NAME: ${{ inputs.formula-name }}
         FORMULA_TEMPLATE_PATH: ${{ inputs.formula-template-path }}
         HOMEBREW_REPO: ${{ inputs.homebrew-repo }}
@@ -49,6 +51,22 @@ runs:
         FORMULA_COMMIT_MESSAGE: ${{ inputs.formula-commit-message }}
         FORMULA_COMMIT_TAG: ${{ inputs.formula-commit-tag }}
       run: |
+        # Resolve auth token. A github-write-token that is passed but empty (e.g. an
+        # unset secret like ${{ secrets.HOMEBREW_PAT }}) overrides the action default
+        # with "" and leaves gh unauthenticated. Fall back to the workflow token so an
+        # accidental empty value doesn't fail cryptically; error clearly if none exists.
+        if [ -z "$GH_TOKEN" ]; then
+          if [ -n "$HOMEBREW_REPO" ] && [ "$HOMEBREW_REPO" != "$CALLER_REPO" ]; then
+            echo "::warning::github-write-token is empty; falling back to GITHUB_TOKEN, which usually cannot write to '$HOMEBREW_REPO'. Set a PAT secret with Contents: write on that repo."
+          fi
+          GH_TOKEN="$WORKFLOW_TOKEN"
+          export GH_TOKEN
+        fi
+        if [ -z "$GH_TOKEN" ]; then
+          echo "::error::No GitHub token available. Provide github-write-token (a PAT with Contents: write when homebrew-repo is a different repository)."
+          exit 1
+        fi
+
         # Default formula name: repo name with "homebrew-" prefix stripped
         if [ -z "$FORMULA_NAME" ]; then
           FORMULA_NAME="${{ github.event.repository.name }}"

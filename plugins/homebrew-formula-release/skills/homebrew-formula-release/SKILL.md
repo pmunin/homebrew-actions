@@ -122,12 +122,28 @@ Full input reference: `references/inputs.md`.
 - **Scenario A:** the workflow's `GITHUB_TOKEN` is enough — just keep `permissions: contents: write`
   (already in the snippet). No secret needed.
 - **Scenario B:** `GITHUB_TOKEN` can't write to another repo, so create a fine-grained PAT and add it
-  as a secret:
+  as a secret. **Do this before the first release** — a missing/empty `HOMEBREW_PAT` is the #1 cause of
+  failures (an unset secret resolves to `""`, which leaves `gh` unauthenticated).
   1. Create the PAT at https://github.com/settings/personal-access-tokens — **Repository access** =
      the target tap repo; **Permissions** → Contents → Read and write.
   2. `gh secret set HOMEBREW_PAT -R <owner>/<this-repo>` (paste the token when prompted).
-  3. Reference it as `github-write-token: ${{ secrets.HOMEBREW_PAT }}` (already in the snippet).
-  4. Ensure the tap repo allows the action: tap repo → Settings → Actions → General → Access.
+  3. Verify it landed: `gh secret list -R <owner>/<this-repo>` should list `HOMEBREW_PAT`.
+  4. Reference it as `github-write-token: ${{ secrets.HOMEBREW_PAT }}` (already in the snippet).
+  5. Ensure the tap repo allows the action: tap repo → Settings → Actions → General → Access.
+
+  Recommended: add a guard step *before* the upsert so a missing PAT fails fast with a clear message
+  instead of a cryptic `gh` error:
+
+  ```yaml
+      - name: Verify tap token present
+        env:
+          PAT: ${{ secrets.HOMEBREW_PAT }}
+        run: |
+          if [ -z "${PAT:-}" ]; then
+            echo "::error::HOMEBREW_PAT secret is not set. Create a fine-grained PAT (Contents: Read & write on the tap repo) and run: gh secret set HOMEBREW_PAT -R <owner>/<this-repo>"
+            exit 1
+          fi
+  ```
 
 ## Step 5 — Ship & verify
 
@@ -142,6 +158,10 @@ Full input reference: `references/inputs.md`.
 - Template placeholders are ONLY filled for keys present in `extra-envs`. If `${TAG}` stays literal in
   the output, the `TAG=...` line is missing.
 - Identical content is a no-op — the action treats GitHub's "no changes" 422 as success.
+- Empty-token footgun: passing `github-write-token: ${{ secrets.X }}` when secret `X` is unset sends an
+  empty string and overrides the default token. The action now warns and falls back to `GITHUB_TOKEN`,
+  but for cross-repo writes that fallback usually lacks permission — so always confirm the PAT secret
+  exists (`gh secret list`).
 - Tag-based `url` (`tag: "${TAG}"`) needs no checksum and is the simplest path. Use a tarball + sha256
   only if you need bottle-style installs; see `references/templates.md`.
 - This skill pins the action with `@main`. Pin to a release tag instead if the user wants stability.

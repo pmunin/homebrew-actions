@@ -11,7 +11,7 @@ Action: `pmunin/homebrew-actions/upsert-formula@main`
 | `branch` | No | Tap repo's default branch | Branch in `homebrew-repo` to commit the formula to. |
 | `formula-commit-message` | No | `Upsert <name> formula` | Commit message for the formula upsert (`[skip ci]` is appended automatically). |
 | `formula-commit-tag` | No | | If set, (re)points this tag at the formula commit in the target repo. Use for self-tap repos. |
-| `github-write-token` | No | `${{ github.token }}` | Token with write access to `homebrew-repo`. Default works same-repo; use a PAT cross-repo. |
+| `github-write-token` | No | `${{ github.token }}` | Token with write access to `homebrew-repo`. Default works same-repo; use a PAT cross-repo. Passing an unset secret sends `""`; the action then warns and falls back to `GITHUB_TOKEN`. |
 
 ## Behavior notes
 
