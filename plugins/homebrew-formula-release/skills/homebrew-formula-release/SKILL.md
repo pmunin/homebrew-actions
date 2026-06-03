@@ -37,6 +37,12 @@ user (or infer) which layout applies:
 - **B. Separate tap repo** — source code lives here, but the formula is written to a different tap
   repo (e.g. `owner/homebrew-tap`). The formula's `url` points at THIS repo's release tag.
 
+**Prefer A when you can.** If the tool's own repo can hold `Formula/<name>.rb`, self-tap needs **no
+PAT and no secret** — the default `GITHUB_TOKEN` writes to the same repo. Only choose B when the
+formula must live in a separate/shared tap. Reaching for a PAT/secret when same-repo would do is the
+most common over-complication (and invites the empty-secret footgun below). A non-`homebrew-`-prefixed
+repo can still self-tap; users just tap it by URL: `brew tap <owner>/<x> <git-url>`.
+
 The scenario determines auth (Step 4) and a couple of workflow inputs (Step 3).
 
 ## Step 2 — Create the formula template
@@ -162,6 +168,15 @@ Full input reference: `references/inputs.md`.
   empty string and overrides the default token. The action now warns and falls back to `GITHUB_TOKEN`,
   but for cross-repo writes that fallback usually lacks permission — so always confirm the PAT secret
   exists (`gh secret list`).
+- Same-repo needs no token: in Scenario A do NOT pass `github-write-token` (or any secret) — the
+  default `GITHUB_TOKEN` suffices. Only Scenario B needs a PAT.
+- Private source repo: the public `releases/download/...` URL 404s without auth, so prebuilt-binary
+  formulae need an authenticated download strategy. A small `gh release download` strategy reuses the
+  user's `gh auth` (no token env var) — see `references/templates.md` §4. Compute the asset `sha256` in
+  the SAME release job that builds the assets and pass it via `extra-envs`.
+- Composite-action authors: never reference `${{ secrets.* }}` anywhere in `upsert-formula/action.yml`,
+  including inside `run:` comments — composite actions can't read `secrets`, the `${{ }}` is evaluated
+  regardless, and the action then fails to load for *every* consumer.
 - Tag-based `url` (`tag: "${TAG}"`) needs no checksum and is the simplest path. Use a tarball + sha256
   only if you need bottle-style installs; see `references/templates.md`.
 - This skill pins the action with `@main`. Pin to a release tag instead if the user wants stability.
